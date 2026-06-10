@@ -43,8 +43,8 @@ npx serve .
 
 ## 🔗 参考
 
-- 原始项目：[PavelDoGreat/WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation)
-- 在线演示：[GitHub Pages](https://blankscreen-exe.github.io/webGL-fluid-simulation/)
+- 流体引擎：[PavelDoGreat/WebGL-Fluid-Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation)
+- Fork 来源：[blankscreen-exe/webGL-fluid-simulation](https://github.com/blankscreen-exe/webGL-fluid-simulation)
 
 ## 📄 许可
 
