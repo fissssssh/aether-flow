@@ -4,90 +4,437 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGL Fluid Simulation</title>
+    <title>以太之流 — 互动流体艺术</title>
 
-    
-    <script src="./dat.gui.min.js"></script>
-    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Open+Sans&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Open+Sans:wght@300;400&display=swap" rel="stylesheet">
+
     <style>
-        *{
+        *, *::before, *::after {
+            box-sizing: border-box;
             user-select: none;
         }
 
-        html,body {
+        html, body {
             overflow: hidden;
-            background-color: black;
-        }
-
-        body{
             margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #050510;
+            font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Open Sans', 'Noto Sans SC', sans-serif;
+            cursor: crosshair;
+        }
+
+        /* ===== Starfield Layer ===== */
+        #starfield {
             position: fixed;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+            pointer-events: none;
         }
-
-        .dg.ac{
-            display: none;
-        }
-
-        canvas {
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-            position: relative;
-        }
-
-        #textbox-container{
-            z-index: 3;
+        .star {
             position: absolute;
-            transition: 1s;
-            margin-left: 10%;
-            margin-top: 25%;
-
+            border-radius: 50%;
+            background: white;
+            animation: twinkle var(--dur) ease-in-out infinite;
+            animation-delay: var(--delay);
         }
-        #textbox-container:hover{
+        @keyframes twinkle {
+            0%, 100% { opacity: var(--op-min); transform: scale(1); }
+            50%      { opacity: var(--op-max); transform: scale(1.8); }
+        }
+
+        /* ===== Canvas ===== */
+        canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 1;
+        }
+
+        /* ===== Vignette Overlay ===== */
+        #vignette {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            background: radial-gradient(ellipse at center, transparent 55%, rgba(5,5,16,0.65) 100%);
+        }
+
+        /* ===== Scanlines Overlay ===== */
+        #scanlines {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 3;
+            pointer-events: none;
+            opacity: 0.04;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.5) 2px,
+                rgba(0,0,0,0.5) 4px
+            );
+        }
+
+        /* ===== Text Overlay ===== */
+        #text-overlay {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 4;
+            pointer-events: none;
+            text-align: center;
+            transition: opacity 1.5s ease-out;
+            opacity: 1;
+        }
+        #text-overlay.fading {
             opacity: 0;
         }
-        #textbox h1 {
-            color: white;
-            font-family: 'Audiowide', cursive;
-            display: inline;
+        #text-overlay h1 {
+            font-family: 'Orbitron', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+            font-weight: 900;
+            font-size: clamp(2rem, 6vw, 5rem);
+            letter-spacing: 0.12em;
+            margin: 0;
+            color: #c8d6ff;
+            text-shadow:
+                0 0 7px rgba(150,180,255,0.9),
+                0 0 20px rgba(130,160,255,0.5),
+                0 0 40px rgba(100,130,255,0.35),
+                0 0 80px rgba(80,100,220,0.2),
+                0 0 120px rgba(60,80,200,0.1);
+            animation: titleGlow 3s ease-in-out infinite;
+        }
+        @keyframes titleGlow {
+            0%, 100% { color: #c8d6ff; text-shadow: 0 0 7px rgba(150,180,255,0.9),0 0 20px rgba(130,160,255,0.5),0 0 40px rgba(100,130,255,0.35); }
+            33%      { color: #e8d0ff; text-shadow: 0 0 7px rgba(200,150,255,0.9),0 0 20px rgba(180,130,255,0.5),0 0 40px rgba(150,100,255,0.35); }
+            66%      { color: #c8ffe8; text-shadow: 0 0 7px rgba(130,255,200,0.9),0 0 20px rgba(100,220,180,0.5),0 0 40px rgba(80,200,150,0.35); }
+        }
+        #text-overlay p {
+            font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Open Sans', 'Noto Sans SC', sans-serif;
+            font-weight: 300;
+            font-size: clamp(0.8rem, 1.5vw, 1.1rem);
+            letter-spacing: 0.25em;
+            color: rgba(200,210,240,0.7);
+            margin: 1.2rem 0 0 0;
+            text-shadow: 0 0 8px rgba(150,180,255,0.4);
         }
 
-        #textbox p {
-            color: white;
-            font-family: 'Open Sans', sans-serif;
-            display: inline;
-            font-stretch: 10pt;
+        /* ===== HUD (bottom-left) ===== */
+        #hud {
+            position: fixed;
+            bottom: 24px; left: 24px;
+            z-index: 5;
+            display: flex;
+            gap: 18px;
+            align-items: center;
+            background: rgba(10,10,30,0.55);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(120,140,220,0.25);
+            border-radius: 12px;
+            padding: 10px 18px;
+            font-family: 'Orbitron', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            color: rgba(180,200,240,0.85);
+            pointer-events: none;
+        }
+        #hud span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        #hud .hud-sep {
+            width: 1px;
+            height: 14px;
+            background: rgba(150,170,220,0.3);
+            border-radius: 1px;
+        }
+        #fps { color: #8ef0b0; }
+        #mode-name { color: #c8b8ff; }
+
+        /* ===== Mode Panel (bottom-right) ===== */
+        #mode-panel {
+            position: fixed;
+            bottom: 28px; right: 24px;
+            z-index: 5;
+            display: flex;
+            gap: 10px;
+        }
+        .mode-btn {
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(130,150,210,0.35);
+            background: rgba(15,15,40,0.5);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            position: relative;
+            outline: none;
+        }
+        .mode-btn:hover {
+            border-color: rgba(180,200,255,0.7);
+            background: rgba(40,40,80,0.65);
+            box-shadow: 0 0 18px rgba(130,150,230,0.35);
+            transform: translateY(-3px);
+        }
+        .mode-btn.active {
+            border-color: rgba(200,210,255,0.9);
+            background: rgba(50,50,100,0.7);
+            box-shadow: 0 0 22px rgba(150,170,255,0.5);
+        }
+        .mode-btn .tooltip {
+            position: absolute;
+            bottom: 54px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(10,10,30,0.85);
+            border: 1px solid rgba(130,150,220,0.4);
+            color: rgba(200,210,240,0.9);
+            font-family: 'Orbitron', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+            font-size: 0.6rem;
+            letter-spacing: 0.1em;
+            padding: 4px 10px;
+            border-radius: 6px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .mode-btn:hover .tooltip {
+            opacity: 1;
         }
 
+        /* ===== Help Toggle Button ===== */
+        #help-btn {
+            position: fixed;
+            top: 18px; right: 18px;
+            z-index: 6;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(130,150,210,0.35);
+            background: rgba(15,15,40,0.5);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: rgba(200,210,240,0.8);
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            outline: none;
+            line-height: 1;
+        }
+        #help-btn:hover {
+            border-color: rgba(180,200,255,0.7);
+            background: rgba(40,40,80,0.65);
+            box-shadow: 0 0 18px rgba(130,150,230,0.35);
+        }
+        #help-overlay {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            background: rgba(10,10,30,0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(140,160,230,0.35);
+            border-radius: 16px;
+            padding: 32px 40px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.35s ease;
+            min-width: 320px;
+        }
+        #help-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        #help-overlay h2 {
+            font-family: 'Orbitron', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+            font-weight: 700;
+            font-size: 1.1rem;
+            letter-spacing: 0.12em;
+            color: #c8d6ff;
+            margin: 0 0 18px 0;
+            text-align: center;
+            text-shadow: 0 0 10px rgba(150,180,255,0.5);
+        }
+        #help-overlay .shortcut-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(130,150,220,0.1);
+            font-size: 0.78rem;
+            color: rgba(190,210,240,0.8);
+        }
+        #help-overlay .key-tag {
+            background: rgba(60,70,120,0.45);
+            border: 1px solid rgba(140,160,220,0.4);
+            border-radius: 5px;
+            padding: 2px 10px;
+            font-family: 'Orbitron', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+            font-size: 0.65rem;
+            letter-spacing: 0.06em;
+            color: #c8d6ff;
+            min-width: 28px;
+            text-align: center;
+        }
+        #help-backdrop {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 9;
+            display: none;
+        }
+        #help-backdrop.visible { display: block; }
+
+        #help-overlay .close-hint {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 0.65rem;
+            color: rgba(160,180,210,0.5);
+            letter-spacing: 0.08em;
+        }
+
+        /* ===== Responsive visibility (driven by JS touch detection) ===== */
+        .mobile-only { display: none !important; }
+        .is-mobile .desktop-only { display: none !important; }
+        .is-mobile .mobile-only { display: flex !important; }
+
+        /* ===== Mobile adjustments (layout only) ===== */
+        @media (max-width: 768px) {
+            #hud {
+                top: 12px; left: 10px; bottom: auto;
+                padding: 5px 8px;
+                gap: 6px;
+                font-size: 0.55rem;
+                border-radius: 8px;
+            }
+            #mode-panel {
+                bottom: 12px; left: 50%;
+                transform: translateX(-50%);
+                right: auto;
+                gap: 8px;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            .mode-btn {
+                width: 36px; height: 36px;
+                font-size: 1rem;
+                border-radius: 50%;
+            }
+            .mode-btn .tooltip {
+                bottom: auto; top: -32px;
+                font-size: 0.5rem;
+                padding: 2px 8px;
+            }
+            #text-overlay p {
+                font-size: 0.75rem;
+                letter-spacing: 0.12em;
+            }
+            #help-overlay {
+                padding: 20px 24px;
+                min-width: auto;
+                width: 88vw;
+            }
+            #help-overlay .shortcut-row {
+                font-size: 0.7rem;
+            }
+        }
     </style>
-
-    <script>
-        window.ga =
-            window.ga || function ()  { (ga.q = ga.q || []).push(arguments)}
-        ga.l = +new Date()
-        ga('create', 'UA-105392568-1', 'auto')
-        ga('send', 'pageview')
-    </script>
 </head>
 <body>
-    <div id="textbox-container">
-        <div id="textbox">
-            <h1>WebGL Fluid Simulation</h1><br/><br/>
-            <p>Just drag your mouse around (or do a swipe)</p><br/>
-            <p>and see the magic!</p>
-        </div>
+
+    <!-- Starfield (populated by JS) -->
+    <div id="starfield"></div>
+
+    <!-- WebGL canvas -->
+    <canvas></canvas>
+
+    <!-- Atmospheric overlays -->
+    <div id="vignette"></div>
+    <div id="scanlines"></div>
+
+    <!-- Title -->
+    <div id="text-overlay">
+        <h1>以太之流</h1>
+        <p class="desktop-only">拖动鼠标创作 &nbsp;·&nbsp; 按 H 查看帮助</p>
+        <p class="mobile-only">👆 滑动手指创作流体</p>
     </div>
-<canvas>
-</canvas>
-    <div class="board">
-        <span class="board-close">&times;</span>
+
+    <!-- Help Button -->
+    <button id="help-btn" aria-label="帮助">?</button>
+
+    <!-- HUD -->
+    <div id="hud">
+        <span id="fps">⏱ 60 FPS</span>
+        <span class="hud-sep"></span>
+        <span id="mode-name">🌌 宇宙</span>
+        <span class="hud-sep"></span>
+        <span id="brush-size">⬤ 0.25</span>
     </div>
+
+    <!-- Mode Switcher -->
+    <div id="mode-panel">
+        <button class="mode-btn active" data-mode="cosmic" aria-label="宇宙模式">
+            🌌<span class="tooltip">宇宙</span>
+        </button>
+        <button class="mode-btn" data-mode="fire" aria-label="火焰模式">
+            🔥<span class="tooltip">火焰</span>
+        </button>
+        <button class="mode-btn" data-mode="ocean" aria-label="海洋模式">
+            🌊<span class="tooltip">海洋</span>
+        </button>
+        <button class="mode-btn" data-mode="aurora" aria-label="极光模式">
+            ✨<span class="tooltip">极光</span>
+        </button>
+        <button class="mode-btn" data-mode="neon" aria-label="霓虹模式">
+            💡<span class="tooltip">霓虹</span>
+        </button>
+        <button class="mode-btn" data-mode="smoke" aria-label="烟雾模式">
+            💨<span class="tooltip">烟雾</span>
+        </button>
+    </div>
+
+    <!-- Help Backdrop (closes help when clicked) -->
+    <div id="help-backdrop"></div>
+
+    <!-- Help Overlay -->
+    <div id="help-overlay">
+        <h2 class="desktop-only">⌨ 快捷键</h2>
+        <h2 class="mobile-only">👆 操作提示</h2>
+
+        <div class="shortcut-row desktop-only"><span>切换模式</span><span><span class="key-tag">1</span>–<span class="key-tag">6</span></span></div>
+        <div class="shortcut-row desktop-only"><span>暂停 / 播放</span><span><span class="key-tag">P</span></span></div>
+        <div class="shortcut-row desktop-only"><span>清除画布</span><span><span class="key-tag">C</span> / 右键</span></div>
+        <div class="shortcut-row desktop-only"><span>随机泼溅</span><span><span class="key-tag">Space</span></span></div>
+        <div class="shortcut-row desktop-only"><span>重置参数</span><span><span class="key-tag">R</span></span></div>
+        <div class="shortcut-row desktop-only"><span>全屏模式</span><span><span class="key-tag">F</span></span></div>
+        <div class="shortcut-row desktop-only"><span>笔刷大小</span><span>🖱 <span class="key-tag">滚轮</span></span></div>
+        <div class="shortcut-row desktop-only"><span>爆发效果</span><span>🖱 <span class="key-tag">双击</span></span></div>
+
+        <div class="shortcut-row mobile-only"><span>爆发效果</span><span>👆 <span class="key-tag">双击</span> 屏幕</span></div>
+        <div class="shortcut-row mobile-only"><span>自动演示</span><span>⏳ 静止 5 秒后自动播放</span></div>
+
+        <p class="close-hint desktop-only">按 H / Esc / ❓ / 点击外部 关闭</p>
+        <p class="close-hint mobile-only">点击 ❓ / 点击外部 关闭</p>
+    </div>
+
     <script src="./script.js"></script>
 </body>
 </html>

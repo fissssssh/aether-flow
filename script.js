@@ -84,6 +84,222 @@ let config = {
     SUNRAYS_WEIGHT: 1.0,
 }
 
+// ========== Aether Flow: Mode Presets ==========
+const MODE_PRESETS = {
+    cosmic: {
+        label: '🌌 宇宙', colorMode: 'hsv-full',
+        CURL: 8, PRESSURE: 0.15, VELOCITY_DISSIPATION: 1.2, DENSITY_DISSIPATION: 2.5,
+        SPLAT_FORCE: 6000, BLOOM_INTENSITY: 0.6, BLOOM_THRESHOLD: 0.5,
+        COLOR_UPDATE_SPEED: 0.03, SHADING: true, COLORFUL: true,
+        BACK_COLOR: { r: 4, g: 3, b: 18 }, BLOOM: true, SUNRAYS: true,
+    },
+    fire: {
+        label: '🔥 火焰', colorMode: 'hsv-fire',
+        CURL: 35, PRESSURE: 0.04, VELOCITY_DISSIPATION: 0.8, DENSITY_DISSIPATION: 1.5,
+        SPLAT_FORCE: 8000, BLOOM_INTENSITY: 0.9, BLOOM_THRESHOLD: 0.4,
+        COLOR_UPDATE_SPEED: 0.08, SHADING: true, COLORFUL: true,
+        BACK_COLOR: { r: 8, g: 1, b: 0 }, BLOOM: true, SUNRAYS: true,
+    },
+    ocean: {
+        label: '🌊 海洋', colorMode: 'hsv-ocean',
+        CURL: 3, PRESSURE: 0.3, VELOCITY_DISSIPATION: 1.8, DENSITY_DISSIPATION: 3,
+        SPLAT_FORCE: 4000, BLOOM_INTENSITY: 0.35, BLOOM_THRESHOLD: 0.65,
+        COLOR_UPDATE_SPEED: 0.04, SHADING: true, COLORFUL: true,
+        BACK_COLOR: { r: 1, g: 5, b: 15 }, BLOOM: true, SUNRAYS: false,
+    },
+    aurora: {
+        label: '✨ 极光', colorMode: 'hsv-aurora',
+        CURL: 12, PRESSURE: 0.18, VELOCITY_DISSIPATION: 1.4, DENSITY_DISSIPATION: 2.2,
+        SPLAT_FORCE: 3500, BLOOM_INTENSITY: 0.55, BLOOM_THRESHOLD: 0.55,
+        COLOR_UPDATE_SPEED: 0.12, SHADING: true, COLORFUL: true,
+        BACK_COLOR: { r: 3, g: 2, b: 12 }, BLOOM: true, SUNRAYS: true,
+    },
+    neon: {
+        label: '💡 霓虹', colorMode: 'hsv-full',
+        CURL: 15, PRESSURE: 0.1, VELOCITY_DISSIPATION: 1.0, DENSITY_DISSIPATION: 1.8,
+        SPLAT_FORCE: 10000, BLOOM_INTENSITY: 1.2, BLOOM_THRESHOLD: 0.3,
+        COLOR_UPDATE_SPEED: 0.15, SHADING: false, COLORFUL: true,
+        BACK_COLOR: { r: 2, g: 1, b: 3 }, BLOOM: true, SUNRAYS: false,
+    },
+    smoke: {
+        label: '💨 烟雾', colorMode: 'monochrome',
+        CURL: 20, PRESSURE: 0.08, VELOCITY_DISSIPATION: 0.6, DENSITY_DISSIPATION: 1.0,
+        SPLAT_FORCE: 5000, BLOOM_INTENSITY: 0.3, BLOOM_THRESHOLD: 0.6,
+        COLOR_UPDATE_SPEED: 0.01, SHADING: true, COLORFUL: false,
+        BACK_COLOR: { r: 8, g: 8, b: 8 }, BLOOM: true, SUNRAYS: false,
+    },
+};
+let currentMode = 'cosmic';
+let lastMousePos = { x: 0, y: 0 };
+
+function applyMode(modeName) {
+    currentMode = modeName;
+    const preset = MODE_PRESETS[modeName];
+    // Apply all preset values to config
+    const keys = ['CURL','PRESSURE','VELOCITY_DISSIPATION','DENSITY_DISSIPATION',
+                  'SPLAT_FORCE','BLOOM_INTENSITY','BLOOM_THRESHOLD',
+                  'COLOR_UPDATE_SPEED','SHADING','COLORFUL','BLOOM','SUNRAYS'];
+    for (const k of keys) {
+        config[k] = preset[k];
+    }
+    config.BACK_COLOR = { r: preset.BACK_COLOR.r, g: preset.BACK_COLOR.g, b: preset.BACK_COLOR.b };
+    updateKeywords();
+    initFramebuffers(); // Reset framebuffers to clear any corrupted data
+    // Update HUD
+    const modeNameEl = document.getElementById('mode-name');
+    if (modeNameEl) modeNameEl.textContent = preset.label;
+    // Update mode buttons
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === modeName);
+    });
+}
+
+function generateColorForMode() {
+    const mode = MODE_PRESETS[currentMode];
+    let h = 0, s = 1.0, v = 1.0;
+    switch (mode.colorMode) {
+        case 'hsv-fire':
+            h = Math.random() * 0.12; // red to orange
+            break;
+        case 'hsv-ocean':
+            h = 0.5 + Math.random() * 0.18; // cyan to blue
+            break;
+        case 'hsv-aurora':
+            h = 0.35 + Math.random() * 0.35; // green to purple
+            break;
+        case 'monochrome':
+            s = 0; v = 0.3 + Math.random() * 0.7;
+            break;
+        default: // hsv-full
+            h = Math.random();
+            break;
+    }
+    const c = HSVtoRGB(h, s, v);
+    c.r *= 0.15; c.g *= 0.15; c.b *= 0.15;
+    return c;
+}
+
+// ========== Idle Auto-Play ==========
+let idleTimer = null;
+const IDLE_TIMEOUT = 5000;
+let idlePlaying = false;
+let idleInterval = null;
+
+function resetIdleTimer() {
+    if (idleTimer) clearTimeout(idleTimer);
+    stopIdlePlay();
+    idleTimer = setTimeout(startIdlePlay, IDLE_TIMEOUT);
+}
+
+function startIdlePlay() {
+    if (idlePlaying || config.PAUSED) return;
+    idlePlaying = true;
+    idleInterval = setInterval(() => {
+        if (config.PAUSED) return;
+        const n = 1 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < n; i++) {
+            const color = generateColorForMode();
+            color.r *= 5; color.g *= 5; color.b *= 5;
+            const x = Math.random();
+            const y = Math.random();
+            const dx = 400 * (Math.random() - 0.5);
+            const dy = 400 * (Math.random() - 0.5);
+            splat(x, y, dx, dy, color);
+        }
+    }, 2500);
+}
+
+function stopIdlePlay() {
+    idlePlaying = false;
+    if (idleInterval) { clearInterval(idleInterval); idleInterval = null; }
+}
+
+// ========== HUD ==========
+let fpsFrameCount = 0;
+let fpsLastTime = performance.now();
+let fpsDisplay = 60;
+
+function updateHUD() {
+    fpsFrameCount++;
+    const now = performance.now();
+    if (now - fpsLastTime >= 500) {
+        fpsDisplay = Math.round(fpsFrameCount / ((now - fpsLastTime) / 1000));
+        fpsFrameCount = 0;
+        fpsLastTime = now;
+        const fpsEl = document.getElementById('fps');
+        if (fpsEl) fpsEl.textContent = '⏱ ' + fpsDisplay + ' FPS';
+    }
+    const brushEl = document.getElementById('brush-size');
+    if (brushEl) brushEl.textContent = '⬤ ' + config.SPLAT_RADIUS.toFixed(2);
+}
+
+// ========== Starfield Generator ==========
+function initStarfield() {
+    const container = document.getElementById('starfield');
+    if (!container) return;
+    const count = 140;
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < count; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        const size = Math.random() * 2.5 + 0.8;
+        star.style.cssText = [
+            'left:' + (Math.random() * 100) + '%',
+            'top:' + (Math.random() * 100) + '%',
+            'width:' + size + 'px',
+            'height:' + size + 'px',
+            '--dur:' + (2 + Math.random() * 5) + 's',
+            '--delay:' + (Math.random() * 6) + 's',
+            '--op-min:' + (0.15 + Math.random() * 0.25),
+            '--op-max:' + (0.6 + Math.random() * 0.4),
+        ].join(';');
+        frag.appendChild(star);
+    }
+    container.appendChild(frag);
+}
+
+// ========== UI Helpers ==========
+function toggleHelp() {
+    const overlay = document.getElementById('help-overlay');
+    const backdrop = document.getElementById('help-backdrop');
+    if (!overlay) return;
+    const showing = overlay.classList.toggle('visible');
+    if (backdrop) backdrop.classList.toggle('visible', showing);
+}
+
+function closeHelp() {
+    const overlay = document.getElementById('help-overlay');
+    const backdrop = document.getElementById('help-backdrop');
+    if (overlay) overlay.classList.remove('visible');
+    if (backdrop) backdrop.classList.remove('visible');
+}
+
+function clearCanvas() {
+    const bk = config.BACK_COLOR;
+    const r = bk.r / 255, g = bk.g / 255, b = bk.b / 255;
+    [dye.read, dye.write, velocity.read, velocity.write].forEach(fbo => {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.fbo);
+        gl.viewport(0, 0, fbo.width, fbo.height);
+        gl.clearColor(r, g, b, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+    });
+}
+
+function burstAt(x, y) {
+    const count = 14;
+    for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5;
+        const dist = 0.01 + Math.random() * 0.04;
+        const bx = x + Math.cos(angle) * dist;
+        const by = y + Math.sin(angle) * dist;
+        const dx = Math.cos(angle) * config.SPLAT_FORCE * 0.8;
+        const dy = Math.sin(angle) * config.SPLAT_FORCE * 0.8;
+        const color = generateColorForMode();
+        color.r *= 8; color.g *= 8; color.b *= 8;
+        splat(bx, by, dx, dy, color);
+    }
+}
+
 function pointerPrototype () {
     this.id = -1;
     this.texcoordX = 0;
@@ -94,7 +310,7 @@ function pointerPrototype () {
     this.deltaY = 0;
     this.down = false;
     this.moved = false;
-    this.color = [30, 0, 300];
+    this.color = { r: 0.03, g: 0, b: 0.3 };
 }
 
 let pointers = [];
@@ -113,7 +329,14 @@ if (!ext.supportLinearFiltering) {
     config.SUNRAYS = false;
 }
 
-startGUI();
+// Set body class based on actual touch capability (not userAgent)
+if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+    document.body.classList.add('is-mobile');
+}
+
+initStarfield();
+initModeButtons();
+resetIdleTimer();
 
 function getWebGLContext (canvas) {
     const params = { alpha: true, depth: false, stencil: false, antialias: false, preserveDrawingBuffer: false };
@@ -153,7 +376,7 @@ function getWebGLContext (canvas) {
         formatR = getSupportedFormat(gl, gl.RGBA, gl.RGBA, halfFloatTexType);
     }
 
-    ga('send', 'event', isWebGL2 ? 'webgl2' : 'webgl', formatRGBA == null ? 'not supported' : 'supported');
+    // ga('send', 'event', isWebGL2 ? 'webgl2' : 'webgl', formatRGBA == null ? 'not supported' : 'supported');
 
     return {
         gl,
@@ -957,7 +1180,44 @@ let bloomFramebuffers = [];
 let sunrays;
 let sunraysTemp;
 
-let ditheringTexture = createTextureAsync('LDR_LLL1_0.png');
+let ditheringTexture = createDitheringTexture();
+
+function createDitheringTexture() {
+    // Generate a 64x64 blue-noise-like dithering pattern procedurally
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(size, size);
+    for (let i = 0; i < imageData.data.length; i += 4) {
+        // High-frequency random noise (effectively white noise for dithering)
+        const v = Math.floor(Math.random() * 256);
+        imageData.data[i]     = v;
+        imageData.data[i + 1] = v;
+        imageData.data[i + 2] = v;
+        imageData.data[i + 3] = 255;
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, size, size, 0, gl.RGB, gl.UNSIGNED_BYTE, canvas);
+
+    return {
+        texture,
+        width: size,
+        height: size,
+        attach(id) {
+            gl.activeTexture(gl.TEXTURE0 + id);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            return id;
+        }
+    };
+}
 
 const blurProgram            = new Program(blurVertexShader, blurShader);
 const copyProgram            = new Program(baseVertexShader, copyShader);
@@ -1167,7 +1427,40 @@ function updateKeywords () {
 
 updateKeywords();
 initFramebuffers();
-multipleSplats(parseInt(Math.random() * 20) + 5);
+// Enhanced startup animation — multi-stage
+setTimeout(() => {
+    for (let i = 0; i < 18; i++) {
+        const color = generateColorForMode();
+        color.r *= 8; color.g *= 8; color.b *= 8;
+        splat(0.5 + (Math.random()-0.5)*0.3, 0.5 + (Math.random()-0.5)*0.3,
+              1200*(Math.random()-0.5), 1200*(Math.random()-0.5), color);
+    }
+}, 100);
+setTimeout(() => {
+    const corners = [[0.2,0.2],[0.8,0.2],[0.2,0.8],[0.8,0.8]];
+    corners.forEach(([cx, cy]) => {
+        for (let i = 0; i < 5; i++) {
+            const color = generateColorForMode();
+            color.r *= 6; color.g *= 6; color.b *= 6;
+            splat(cx, cy, 800*(Math.random()-0.5), 800*(Math.random()-0.5), color);
+        }
+    });
+}, 500);
+setTimeout(() => {
+    for (let i = 0; i < 10; i++) {
+        const color = generateColorForMode();
+        color.r *= 7; color.g *= 7; color.b *= 7;
+        splat(Math.random(), Math.random(), 900*(Math.random()-0.5), 900*(Math.random()-0.5), color);
+    }
+}, 900);
+// Fade out title overlay when user starts interacting
+document.addEventListener('pointerdown', () => {
+    const overlay = document.getElementById('text-overlay');
+    if (overlay && !overlay.classList.contains('fading')) {
+        overlay.classList.add('fading');
+        setTimeout(() => { if (overlay) overlay.style.display = 'none'; }, 1500);
+    }
+}, { once: false });
 
 let lastUpdateTime = Date.now();
 let colorUpdateTimer = 0.0;
@@ -1182,6 +1475,7 @@ function update () {
     if (!config.PAUSED)
         step(dt);
     render(null);
+    updateHUD();
     requestAnimationFrame(update);
 }
 
@@ -1211,7 +1505,7 @@ function updateColors (dt) {
     if (colorUpdateTimer >= 1) {
         colorUpdateTimer = wrap(colorUpdateTimer, 0, 1);
         pointers.forEach(p => {
-            p.color = generateColor();
+            p.color = generateColorForMode();
         });
     }
 }
@@ -1426,7 +1720,7 @@ function splatPointer (pointer) {
 
 function multipleSplats (amount) {
     for (let i = 0; i < amount; i++) {
-        const color = generateColor();
+        const color = generateColorForMode();
         color.r *= 10.0;
         color.g *= 10.0;
         color.b *= 10.0;
@@ -1462,8 +1756,15 @@ function correctRadius (radius) {
 }
 
 canvas.addEventListener('mousedown', e => {
+    resetIdleTimer();
     let posX = scaleByPixelRatio(e.offsetX);
     let posY = scaleByPixelRatio(e.offsetY);
+    lastMousePos = { x: posX / canvas.width, y: 1.0 - posY / canvas.height };
+    // Double-click detection
+    if (e.detail === 2) {
+        burstAt(lastMousePos.x, lastMousePos.y);
+        return;
+    }
     let pointer = pointers.find(p => p.id == -1);
     if (pointer == null)
         pointer = new pointerPrototype();
@@ -1471,20 +1772,57 @@ canvas.addEventListener('mousedown', e => {
 });
 
 canvas.addEventListener('mousemove', e => {
-    let pointer = pointers[0];
-    if (!pointer.down) return;
+    resetIdleTimer();
     let posX = scaleByPixelRatio(e.offsetX);
     let posY = scaleByPixelRatio(e.offsetY);
+    lastMousePos = { x: posX / canvas.width, y: 1.0 - posY / canvas.height };
+    let pointer = pointers[0];
+    if (!pointer.down) return;
     updatePointerMoveData(pointer, posX, posY);
 });
 
 window.addEventListener('mouseup', () => {
     updatePointerUpData(pointers[0]);
+    resetIdleTimer();
 });
+
+// Right-click to clear
+canvas.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    clearCanvas();
+    resetIdleTimer();
+});
+
+// Scroll to adjust brush size
+canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    resetIdleTimer();
+    const step = e.deltaY > 0 ? -0.03 : 0.03;
+    config.SPLAT_RADIUS = Math.max(0.05, Math.min(0.8, config.SPLAT_RADIUS + step));
+}, { passive: false });
+
+let lastTapTime = 0;
+let lastTapPos = { x: 0, y: 0 };
 
 canvas.addEventListener('touchstart', e => {
     e.preventDefault();
+    resetIdleTimer();
     const touches = e.targetTouches;
+
+    // Double-tap burst detection (single finger only)
+    if (touches.length === 1) {
+        const now = Date.now();
+        const tx = touches[0].pageX, ty = touches[0].pageY;
+        const dist = Math.hypot(tx - lastTapPos.x, ty - lastTapPos.y);
+        if (now - lastTapTime < 300 && dist < 40) {
+            burstAt(tx / window.innerWidth, 1.0 - ty / window.innerHeight);
+            lastTapTime = 0;
+            return;
+        }
+        lastTapTime = now;
+        lastTapPos = { x: tx, y: ty };
+    }
+
     while (touches.length >= pointers.length)
         pointers.push(new pointerPrototype());
     for (let i = 0; i < touches.length; i++) {
@@ -1496,6 +1834,7 @@ canvas.addEventListener('touchstart', e => {
 
 canvas.addEventListener('touchmove', e => {
     e.preventDefault();
+    resetIdleTimer();
     const touches = e.targetTouches;
     for (let i = 0; i < touches.length; i++) {
         let pointer = pointers[i + 1];
@@ -1507,6 +1846,7 @@ canvas.addEventListener('touchmove', e => {
 }, false);
 
 window.addEventListener('touchend', e => {
+    resetIdleTimer();
     const touches = e.changedTouches;
     for (let i = 0; i < touches.length; i++)
     {
@@ -1517,10 +1857,38 @@ window.addEventListener('touchend', e => {
 });
 
 window.addEventListener('keydown', e => {
-    if (e.code === 'KeyP')
+    resetIdleTimer();
+    if (e.code === 'KeyP') {
         config.PAUSED = !config.PAUSED;
-    if (e.key === ' ')
-        splatStack.push(parseInt(Math.random() * 20) + 5);
+        if (config.PAUSED) stopIdlePlay();
+    }
+    if (e.key === ' ') {
+        e.preventDefault();
+        const x = lastMousePos.x || Math.random();
+        const y = lastMousePos.y || Math.random();
+        const count = 3 + Math.floor(Math.random() * 15);
+        for (let i = 0; i < count; i++) {
+            const color = generateColorForMode();
+            color.r *= 10; color.g *= 10; color.b *= 10;
+            const dx = 1000 * (Math.random() - 0.5);
+            const dy = 1000 * (Math.random() - 0.5);
+            splat(
+                x + (Math.random() - 0.5) * 0.15,
+                y + (Math.random() - 0.5) * 0.15,
+                dx, dy, color
+            );
+        }
+    }
+    if (e.code === 'KeyC') clearCanvas();
+    if (e.code === 'KeyH') toggleHelp();
+    if (e.code === 'KeyR') { applyMode(currentMode); clearCanvas(); }
+    if (e.code === 'KeyF') {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.body.requestFullscreen().catch(() => {});
+    }
+    // Mode switching via number keys
+    const modeKeys = { Digit1:'cosmic', Digit2:'fire', Digit3:'ocean', Digit4:'aurora', Digit5:'neon', Digit6:'smoke' };
+    if (modeKeys[e.code]) applyMode(modeKeys[e.code]);
 });
 
 function updatePointerDownData (pointer, id, posX, posY) {
@@ -1533,7 +1901,7 @@ function updatePointerDownData (pointer, id, posX, posY) {
     pointer.prevTexcoordY = pointer.texcoordY;
     pointer.deltaX = 0;
     pointer.deltaY = 0;
-    pointer.color = generateColor();
+    pointer.color = generateColorForMode();
 }
 
 function updatePointerMoveData (pointer, posX, posY) {
@@ -1644,3 +2012,34 @@ function hashCode (s) {
     }
     return hash;
 };
+
+// ========== Aether Flow: Mode Button Init ==========
+function initModeButtons() {
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            applyMode(btn.dataset.mode);
+            resetIdleTimer();
+        });
+    });
+
+    // Backdrop click closes help
+    const backdrop = document.getElementById('help-backdrop');
+    if (backdrop) {
+        backdrop.addEventListener('click', closeHelp);
+        backdrop.addEventListener('touchstart', (e) => { e.preventDefault(); closeHelp(); });
+    }
+
+    // Escape to close help
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Escape') closeHelp();
+    });
+
+    // Help button click
+    const helpBtn = document.getElementById('help-btn');
+    if (helpBtn) {
+        helpBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleHelp();
+        });
+    }
+}
